@@ -12,60 +12,90 @@
     h2 { font-size: 18px; margin-top: 0; color: #333; text-align: center; }
     .form-group { margin-bottom: 15px; }
     label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #555; }
-    input { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    input, textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; font-family: inherit; }
+    textarea { resize: vertical; height: 60px; }
     button { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     button:disabled { background: #ccc; }
+    
+    /* 打刻ログ表示スタイリング */
+    .logs-container { margin-top: 25px; border-top: 2px dashed #eee; padding-top: 15px; display: none; }
+    .logs-title { font-size: 15px; font-weight: bold; color: #333; margin-bottom: 10px; text-align: center; }
+    .log-item { background: #f9f9f9; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #444; border-left: 4px solid #06C755; }
+    .log-date { font-weight: bold; color: #06C755; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>退勤・経費入力</h2>
+    <h2>勤怠・経費打刻</h2>
     <form id="attendanceForm">
+      <div class="form-group">
+        <label>お名前（フルネーム）</label>
+        <input type="text" id="staff_name" placeholder="例: 山田 太郎" required>
+      </div>
+
       <div class="form-group">
         <label>日付</label>
         <input type="date" id="work_date" required>
       </div>
+
       <div class="form-group">
         <label>出勤時間</label>
         <input type="time" id="start_time" value="09:00" required>
       </div>
+
       <div class="form-group">
         <label>退勤時間</label>
         <input type="time" id="end_time" value="17:00" required>
       </div>
+
       <div class="form-group">
         <label>休憩時間 (分)</label>
         <input type="number" id="break_minutes" value="60" required>
       </div>
+
+      <div class="form-group">
+        <label>立替金 (円)</label>
+        <input type="number" id="expense_amount" value="0">
+      </div>
+
       <div class="form-group">
         <label>交通費 (円)</label>
         <input type="number" id="transport_cost" value="0">
       </div>
+
       <div class="form-group">
-        <label>経費立て替え (円)</label>
-        <input type="number" id="expense_amount" value="0">
+        <label>備考欄</label>
+        <textarea id="memo" placeholder="遅刻理由や連絡事項など"></textarea>
       </div>
+
       <button type="submit" id="submitBtn">送信する</button>
     </form>
+
+    <!-- 送信後の直近履歴表示エリア -->
+    <div id="logsContainer" class="logs-container">
+      <div class="logs-title">📋 あなたの直近登録履歴（最新5件）</div>
+      <div id="logsList"></div>
+      <button type="button" onclick="liff.closeWindow()" style="background: #666; margin-top: 15px;">画面を閉じる</button>
+    </div>
   </div>
 
   <script>
-    // ★ご自身の情報に書き換えてください
     const LIFF_ID = "2012196822-vZFn0zUq"; 
     const GAS_URL = "https://script.google.com/macros/s/AKfycbzUT6RsBOtKtnDJ_M9CQFjKJH2gKGuNloOVhIKHJuffTDYOu-Ub3eW_4l0nCYYg6xAKvQ/exec"; 
-
-    let userName = "未取得";
 
     // LIFFの初期化
     liff.init({ liffId: LIFF_ID })
       .then(() => {
-        // 今日の日付を初期セット
+        // 今日の日付を自動セット
         document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
         
-        // ログイン中のユーザー名を取得
+        // LINEプロフィール名を取得してデフォルト入力（補完）
         if (liff.isLoggedIn()) {
           liff.getProfile().then(profile => {
-            userName = profile.displayName;
+            const nameInput = document.getElementById("staff_name");
+            if (!nameInput.value) {
+              nameInput.value = profile.displayName;
+            }
           });
         }
       })
@@ -77,16 +107,17 @@
       
       const submitBtn = document.getElementById("submitBtn");
       submitBtn.disabled = true;
-      submitBtn.innerText = "送信中...";
+      submitBtn.innerText = "処理中...";
 
       const formData = {
+        staff_name: document.getElementById("staff_name").value,
         work_date: document.getElementById("work_date").value,
         start_time: document.getElementById("start_time").value,
         end_time: document.getElementById("end_time").value,
         break_minutes: Number(document.getElementById("break_minutes").value),
-        transport_cost: Number(document.getElementById("transport_cost").value),
         expense_amount: Number(document.getElementById("expense_amount").value),
-        staff_name: userName
+        transport_cost: Number(document.getElementById("transport_cost").value),
+        memo: document.getElementById("memo").value
       };
 
       // GASへPOST送信
@@ -96,11 +127,39 @@
       })
       .then(res => res.json())
       .then(data => {
-        alert("送信が完了しました！");
-        liff.closeWindow(); // LINE内のフォーム画面を閉じる
+        if (data.status === "success") {
+          alert(data.message || "送信が完了しました！");
+          
+          // 送信ボタンとフォームを非表示にして履歴ログを出力
+          document.getElementById("attendanceForm").style.display = "none";
+          
+          const logsContainer = document.getElementById("logsContainer");
+          const logsList = document.getElementById("logsList");
+          logsList.innerHTML = "";
+
+          if (data.logs && data.logs.length > 0) {
+            data.logs.forEach(log => {
+              const item = document.createElement("div");
+              item.className = "log-item";
+              item.innerHTML = `
+                <div class="log-date">📅 ${log.date}</div>
+                <div>勤務時間: ${log.start} 〜 ${log.end}（実働 ${log.workHours}h）</div>
+              `;
+              logsList.appendChild(item);
+            });
+          } else {
+            logsList.innerHTML = "<div class='log-item'>履歴データはありません。</div>";
+          }
+          
+          logsContainer.style.display = "block";
+        } else {
+          alert("エラー: " + data.message);
+          submitBtn.disabled = false;
+          submitBtn.innerText = "送信する";
+        }
       })
       .catch(err => {
-        alert("エラーが発生しました: " + err);
+        alert("送信エラーが発生しました: " + err);
         submitBtn.disabled = false;
         submitBtn.innerText = "送信する";
       });
