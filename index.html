@@ -96,18 +96,24 @@
 
   <script>
     const LIFF_ID = "2012196822-vZFn0zUq"; 
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzUT6RsBOtKtnDJ_M9CQFjKJH2gKGuNloOVhIKHJuffTDYOu-Ub3eW_4l0nCYYg6xAKvQ/exec"; 
+    const urlParams = new URLSearchParams(window.location.search);
+    const GAS_URL = urlParams.get('gas');
 
-    let currentUserId = ""; // ユーザー固有ID保持変数
+  // GAS_URL が正しく渡されていない場合の安全ガード
+    if (!GAS_URL) {
+      alert("システムの初期設定（GAS URLのパラメータ設定）が正しくありません。管理者にお問い合わせください。");
+    }
 
-    // LIFF初期化
+    let currentUserId = ""; // LINE User ID 保持変数
+
+  // LIFFの初期化
     liff.init({ liffId: LIFF_ID })
       .then(() => {
         document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
-        
+      
         if (liff.isLoggedIn()) {
           liff.getProfile().then(profile => {
-            currentUserId = profile.userId; // LINE User IDを保持
+            currentUserId = profile.userId;
             const nameInput = document.getElementById("staff_name");
             if (!nameInput.value) {
               nameInput.value = profile.displayName;
