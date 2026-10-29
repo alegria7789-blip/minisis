@@ -66,12 +66,14 @@
           <input type="number" id="break_minutes" value="60" required>
         </div>
 
-        <div class="form-group">
+        <!-- オプション制御用 ID を追加（立替金） -->
+        <div class="form-group" id="group_expense">
           <label>立替金 (円)</label>
           <input type="number" id="expense_amount" value="0">
         </div>
 
-        <div class="form-group">
+        <!-- オプション制御用 ID を追加（交通費） -->
+        <div class="form-group" id="group_transport">
           <label>交通費 (円)</label>
           <input type="number" id="transport_cost" value="0">
         </div>
@@ -96,17 +98,39 @@
 
   <script>
     const LIFF_ID = "2012196822-vZFn0zUq"; 
+    
+    // -------------------------------------------------------------
+    // URLクエリパラメータの解析
+    // -------------------------------------------------------------
     const urlParams = new URLSearchParams(window.location.search);
-    const GAS_URL = urlParams.get('gas');
+    
+    // 1. GAS URL の動的取得（未指定の場合はご自身のテスト用GAS URLへ自動接続）
+    const GAS_URL = urlParams.get('gas') || "https://script.google.com/macros/s/【ご自身のテスト用GASのID】/exec";
 
-  // GAS_URL が正しく渡されていない場合の安全ガード
-    if (!GAS_URL) {
-      alert("システムの初期設定（GAS URLのパラメータ設定）が正しくありません。管理者にお問い合わせください。");
+    // 2. 表示・非表示オプションの判定 (?expense=off や ?transport=off)
+    const hideExpense = urlParams.get('expense') === 'off';
+    const hideTransport = urlParams.get('transport') === 'off';
+
+    // 画面ロード時に非表示オプションを反映
+    window.addEventListener('DOMContentLoaded', () => {
+      if (hideExpense) {
+        const expGroup = document.getElementById('group_expense');
+        if (expGroup) expGroup.style.display = 'none';
+      }
+      if (hideTransport) {
+        const transGroup = document.getElementById('group_transport');
+        if (transGroup) transGroup.style.display = 'none';
+      }
+    });
+
+    // 安全ガード
+    if (!GAS_URL || GAS_URL.includes("【ご自身のテスト用GASのID】")) {
+      console.warn("GAS_URLが正しく設定されていません。URL末尾に ?gas=... を付与するかデフォルトURLを設定してください。");
     }
 
     let currentUserId = ""; // LINE User ID 保持変数
 
-  // LIFFの初期化
+    // LIFFの初期化
     liff.init({ liffId: LIFF_ID })
       .then(() => {
         document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
@@ -154,6 +178,10 @@
       submitBtn.disabled = true;
       submitBtn.innerText = "送信処理中...";
 
+      // 非表示の場合でもGAS側へ安全に 0 を渡すガード処理
+      const expenseVal = hideExpense ? 0 : (Number(document.getElementById("expense_amount").value) || 0);
+      const transportVal = hideTransport ? 0 : (Number(document.getElementById("transport_cost").value) || 0);
+
       const formData = {
         action: "submit",
         user_id: currentUserId, // LINE User ID を送信
@@ -161,10 +189,10 @@
         work_date: document.getElementById("work_date").value,
         start_time: document.getElementById("start_time").value,
         end_time: document.getElementById("end_time").value,
-        break_minutes: Number(document.getElementById("break_minutes").value),
-        expense_amount: Number(document.getElementById("expense_amount").value),
-        transport_cost: Number(document.getElementById("transport_cost").value),
-        memo: document.getElementById("memo").value
+        break_minutes: Number(document.getElementById("break_minutes").value) || 0,
+        expense_amount: expenseVal,
+        transport_cost: transportVal,
+        memo: document.getElementById("memo").value || ""
       };
 
       fetch(GAS_URL, {
