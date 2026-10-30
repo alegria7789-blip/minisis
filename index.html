@@ -19,9 +19,14 @@
 
     .form-group { margin-bottom: 14px; }
     label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; color: #444; }
-    input, textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; }
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; }
     textarea { resize: vertical; height: 50px; }
     
+    /* チェックボックス用のスタイル */
+    .checkbox-group { display: flex; align-items: center; cursor: pointer; user-select: none; padding: 6px 0; }
+    .checkbox-group input[type="checkbox"] { width: 20px; height: 20px; margin-right: 10px; accent-color: #06C755; cursor: pointer; }
+    .checkbox-group label { margin-bottom: 0; cursor: pointer; font-size: 14px; color: #333; }
+
     .submit-btn { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .submit-btn:disabled { background: #ccc; }
     
@@ -66,13 +71,25 @@
           <input type="number" id="break_minutes" value="60" required>
         </div>
 
-        <!-- オプション制御用 ID を追加（立替金） -->
+        <!-- オプション機能：特別時給① -->
+        <div class="form-group checkbox-group" id="group_special1">
+          <input type="checkbox" id="is_special_wage1">
+          <label for="is_special_wage1">特別時給①を適用する</label>
+        </div>
+
+        <!-- オプション機能：特別時給② -->
+        <div class="form-group checkbox-group" id="group_special2">
+          <input type="checkbox" id="is_special_wage2">
+          <label for="is_special_wage2">特別時給②を適用する</label>
+        </div>
+
+        <!-- オプション機能：立替金 -->
         <div class="form-group" id="group_expense">
           <label>立替金 (円)</label>
           <input type="number" id="expense_amount" value="0">
         </div>
 
-        <!-- オプション制御用 ID を追加（交通費） -->
+        <!-- オプション機能：交通費 -->
         <div class="form-group" id="group_transport">
           <label>交通費 (円)</label>
           <input type="number" id="transport_cost" value="0">
@@ -104,12 +121,14 @@
     // -------------------------------------------------------------
     const urlParams = new URLSearchParams(window.location.search);
     
-    // 1. GAS URL の動的取得（未指定の場合はご自身のテスト用GAS URLへ自動接続）
+    // 1. GAS URL の動的取得
     const GAS_URL = urlParams.get('gas') || "https://script.google.com/macros/s/【ご自身のテスト用GASのID】/exec";
 
-    // 2. 表示・非表示オプションの判定 (?expense=off や ?transport=off)
+    // 2. 表示・非表示オプションの判定
     const hideExpense = urlParams.get('expense') === 'off';
     const hideTransport = urlParams.get('transport') === 'off';
+    const hideSpecial1 = urlParams.get('special1') === 'off';
+    const hideSpecial2 = urlParams.get('special2') === 'off';
 
     // 画面ロード時に非表示オプションを反映
     window.addEventListener('DOMContentLoaded', () => {
@@ -121,14 +140,21 @@
         const transGroup = document.getElementById('group_transport');
         if (transGroup) transGroup.style.display = 'none';
       }
+      if (hideSpecial1) {
+        const spec1Group = document.getElementById('group_special1');
+        if (spec1Group) spec1Group.style.display = 'none';
+      }
+      if (hideSpecial2) {
+        const spec2Group = document.getElementById('group_special2');
+        if (spec2Group) spec2Group.style.display = 'none';
+      }
     });
 
-    // 安全ガード
     if (!GAS_URL || GAS_URL.includes("【ご自身のテスト用GASのID】")) {
-      console.warn("GAS_URLが正しく設定されていません。URL末尾に ?gas=... を付与するかデフォルトURLを設定してください。");
+      console.warn("GAS_URLが正しく設定されていません。URL末尾に ?gas=... を付与してください。");
     }
 
-    let currentUserId = ""; // LINE User ID 保持変数
+    let currentUserId = "";
 
     // LIFFの初期化
     liff.init({ liffId: LIFF_ID })
@@ -142,7 +168,7 @@
             if (!nameInput.value) {
               nameInput.value = profile.displayName;
             }
-            fetchLogs(); // ログ初回取得
+            fetchLogs();
           });
         } else {
           liff.login();
@@ -178,18 +204,22 @@
       submitBtn.disabled = true;
       submitBtn.innerText = "送信処理中...";
 
-      // 非表示の場合でもGAS側へ安全に 0 を渡すガード処理
+      // 非表示または未チェックの場合は安全に false / 0 をセット
       const expenseVal = hideExpense ? 0 : (Number(document.getElementById("expense_amount").value) || 0);
       const transportVal = hideTransport ? 0 : (Number(document.getElementById("transport_cost").value) || 0);
+      const isSpecial1 = hideSpecial1 ? false : document.getElementById("is_special_wage1").checked;
+      const isSpecial2 = hideSpecial2 ? false : document.getElementById("is_special_wage2").checked;
 
       const formData = {
         action: "submit",
-        user_id: currentUserId, // LINE User ID を送信
+        user_id: currentUserId,
         staff_name: document.getElementById("staff_name").value,
         work_date: document.getElementById("work_date").value,
         start_time: document.getElementById("start_time").value,
         end_time: document.getElementById("end_time").value,
         break_minutes: Number(document.getElementById("break_minutes").value) || 0,
+        is_special_wage1: isSpecial1, // true / false で送信
+        is_special_wage2: isSpecial2, // true / false で送信
         expense_amount: expenseVal,
         transport_cost: transportVal,
         memo: document.getElementById("memo").value || ""
@@ -218,7 +248,7 @@
       });
     });
 
-    // ログ取得処理（LINE User IDで絞り込み）
+    // ログ取得処理
     function fetchLogs() {
       if (!currentUserId) return;
 
@@ -254,8 +284,14 @@
       logs.forEach(log => {
         const card = document.createElement("div");
         card.className = "log-card";
+        
+        // 特別時給フラグのバッジ表示（ログ確認用）
+        let specialTags = "";
+        if (log.isSpecial1) specialTags += " <span style='background:#e6f7ff; color:#1890ff; padding:2px 6px; border-radius:4px; font-size:11px;'>特➀</span>";
+        if (log.isSpecial2) specialTags += " <span style='background:#fff7e6; color:#fa8c16; padding:2px 6px; border-radius:4px; font-size:11px;'>特➁</span>";
+
         card.innerHTML = `
-          <div class="log-date">📅 ${log.date}</div>
+          <div class="log-date">📅 ${log.date} ${specialTags}</div>
           <div class="log-detail">
             <b>時間:</b> ${log.start} 〜 ${log.end} (実働 ${log.workHours}h)<br>
             ${log.memo ? `<b>備考:</b> ${log.memo}` : ''}
