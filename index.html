@@ -164,10 +164,7 @@
         if (liff.isLoggedIn()) {
           liff.getProfile().then(profile => {
             currentUserId = profile.userId;
-            const nameInput = document.getElementById("staff_name");
-            if (!nameInput.value) {
-              nameInput.value = profile.displayName;
-            }
+            
             fetchLogs();
           });
         } else {
