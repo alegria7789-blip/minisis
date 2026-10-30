@@ -22,7 +22,6 @@
     input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; }
     textarea { resize: vertical; height: 50px; }
     
-    /* チェックボックス用のスタイル */
     .checkbox-group { display: flex; align-items: center; cursor: pointer; user-select: none; padding: 6px 0; }
     .checkbox-group input[type="checkbox"] { width: 20px; height: 20px; margin-right: 10px; accent-color: #06C755; cursor: pointer; }
     .checkbox-group label { margin-bottom: 0; cursor: pointer; font-size: 14px; color: #333; }
@@ -45,10 +44,10 @@
 
     <!-- 1. 勤怠入力タブ -->
     <div id="inputTab" class="tab-content active">
-      <form id="attendanceForm">
+      <form id="attendanceForm" autocomplete="off">
         <div class="form-group">
           <label>お名前（フルネーム）</label>
-          <input type="text" id="staff_name" placeholder="例: 山田 太郎" required>
+          <input type="text" id="staff_name" placeholder="例: 山田 太郎" autocomplete="off" required>
         </div>
 
         <div class="form-group">
@@ -116,21 +115,15 @@
   <script>
     const LIFF_ID = "2012196822-vZFn0zUq"; 
     
-    // -------------------------------------------------------------
     // URLクエリパラメータの解析
-    // -------------------------------------------------------------
     const urlParams = new URLSearchParams(window.location.search);
-    
-    // 1. GAS URL の動的取得
     const GAS_URL = urlParams.get('gas') || "https://script.google.com/macros/s/【ご自身のテスト用GASのID】/exec";
 
-    // 2. 表示・非表示オプションの判定
     const hideExpense = urlParams.get('expense') === 'off';
     const hideTransport = urlParams.get('transport') === 'off';
     const hideSpecial1 = urlParams.get('special1') === 'off';
     const hideSpecial2 = urlParams.get('special2') === 'off';
 
-    // 画面ロード時に非表示オプションを反映
     window.addEventListener('DOMContentLoaded', () => {
       if (hideExpense) {
         const expGroup = document.getElementById('group_expense');
@@ -150,10 +143,6 @@
       }
     });
 
-    if (!GAS_URL || GAS_URL.includes("【ご自身のテスト用GASのID】")) {
-      console.warn("GAS_URLが正しく設定されていません。URL末尾に ?gas=... を付与してください。");
-    }
-
     let currentUserId = "";
 
     // LIFFの初期化
@@ -164,7 +153,13 @@
         if (liff.isLoggedIn()) {
           liff.getProfile().then(profile => {
             currentUserId = profile.userId;
-            
+
+            // 前回ローカルストレージに保存した名前があれば復元
+            const savedName = localStorage.getItem("staff_name_saved");
+            if (savedName) {
+              document.getElementById("staff_name").value = savedName;
+            }
+
             fetchLogs();
           });
         } else {
@@ -173,7 +168,6 @@
       })
       .catch(err => console.error("LIFF Init Error:", err));
 
-    // タブ切り替え関数
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -188,7 +182,6 @@
       }
     }
 
-    // フォーム送信処理
     document.getElementById("attendanceForm").addEventListener("submit", function(e) {
       e.preventDefault();
       
@@ -201,22 +194,23 @@
       submitBtn.disabled = true;
       submitBtn.innerText = "送信処理中...";
 
-      // 非表示または未チェックの場合は安全に false / 0 をセット
       const expenseVal = hideExpense ? 0 : (Number(document.getElementById("expense_amount").value) || 0);
       const transportVal = hideTransport ? 0 : (Number(document.getElementById("transport_cost").value) || 0);
       const isSpecial1 = hideSpecial1 ? false : document.getElementById("is_special_wage1").checked;
       const isSpecial2 = hideSpecial2 ? false : document.getElementById("is_special_wage2").checked;
 
+      const inputName = document.getElementById("staff_name").value.trim();
+
       const formData = {
         action: "submit",
         user_id: currentUserId,
-        staff_name: document.getElementById("staff_name").value,
+        staff_name: inputName,
         work_date: document.getElementById("work_date").value,
         start_time: document.getElementById("start_time").value,
         end_time: document.getElementById("end_time").value,
         break_minutes: Number(document.getElementById("break_minutes").value) || 0,
-        is_special_wage1: isSpecial1, // true / false で送信
-        is_special_wage2: isSpecial2, // true / false で送信
+        is_special_wage1: isSpecial1,
+        is_special_wage2: isSpecial2,
         expense_amount: expenseVal,
         transport_cost: transportVal,
         memo: document.getElementById("memo").value || ""
@@ -230,6 +224,12 @@
       .then(data => {
         if (data.status === "success") {
           alert(data.message);
+
+          // 送信成功時に入力したお名前をローカルストレージへ保存
+          if (inputName) {
+            localStorage.setItem("staff_name_saved", inputName);
+          }
+
           renderLogs(data.logs);
           switchTab('logTab');
         } else {
@@ -245,7 +245,6 @@
       });
     });
 
-    // ログ取得処理
     function fetchLogs() {
       if (!currentUserId) return;
 
@@ -268,7 +267,6 @@
       });
     }
 
-    // ログ描画処理
     function renderLogs(logs) {
       const container = document.getElementById("logsContainer");
       container.innerHTML = "";
@@ -282,10 +280,9 @@
         const card = document.createElement("div");
         card.className = "log-card";
         
-        // 特別時給フラグのバッジ表示（ログ確認用）
         let specialTags = "";
-        if (log.isSpecial1) specialTags += " <span style='background:#e6f7ff; color:#1890ff; padding:2px 6px; border-radius:4px; font-size:11px;'>特➀</span>";
-        if (log.isSpecial2) specialTags += " <span style='background:#fff7e6; color:#fa8c16; padding:2px 6px; border-radius:4px; font-size:11px;'>特➁</span>";
+        if (log.specialHours1 > 0) specialTags += " <span style='background:#e6f7ff; color:#1890ff; padding:2px 6px; border-radius:4px; font-size:11px;'>特➀</span>";
+        if (log.specialHours2 > 0) specialTags += " <span style='background:#fff7e6; color:#fa8c16; padding:2px 6px; border-radius:4px; font-size:11px;'>特➁</span>";
 
         card.innerHTML = `
           <div class="log-date">📅 ${log.date} ${specialTags}</div>
