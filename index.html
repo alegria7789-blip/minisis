@@ -8,7 +8,7 @@
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f4f5f7; margin: 0; }
-    .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .container { max-width: 400px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
     
     .tab-header { display: flex; border-bottom: 2px solid #eee; margin-bottom: 20px; }
     .tab-btn { flex: 1; padding: 12px; text-align: center; font-weight: bold; font-size: 14px; color: #888; background: none; border: none; cursor: pointer; border-bottom: 3px solid transparent; }
@@ -26,13 +26,13 @@
     .checkbox-group input[type="checkbox"] { width: 20px; height: 20px; margin-right: 10px; accent-color: #06C755; cursor: pointer; }
     .checkbox-group label { margin-bottom: 0; cursor: pointer; font-size: 14px; color: #333; }
 
-    .submit-btn { width: 100%; padding: 12px; background: #06C755; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    .submit-btn { width: 100%; padding: 12px; background: #06C755; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
     
     .log-card { background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #06C755; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .log-date { font-weight: bold; color: #06C755; font-size: 14px; margin-bottom: 4px; }
     .log-detail { color: #555; line-height: 1.4; }
-    .reload-btn { width: 100%; padding: 10px; background: #555; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 15px; }
+    .reload-btn { width: 100%; padding: 10px; background: #555; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 15px; }
   </style>
 </head>
 <body>
@@ -70,25 +70,22 @@
           <input type="number" id="break_minutes" value="60" required>
         </div>
 
-        <!-- オプション機能：特別時給① -->
+        <!-- オプション機能（URLパラメータで制御） -->
         <div class="form-group checkbox-group" id="group_special1">
           <input type="checkbox" id="is_special_wage1">
           <label for="is_special_wage1">特別時給①を適用する</label>
         </div>
 
-        <!-- オプション機能：特別時給② -->
         <div class="form-group checkbox-group" id="group_special2">
           <input type="checkbox" id="is_special_wage2">
           <label for="is_special_wage2">特別時給②を適用する</label>
         </div>
 
-        <!-- オプション機能：立替金 -->
         <div class="form-group" id="group_expense">
           <label for="expense_amount">立替金 (円)</label>
           <input type="number" id="expense_amount" value="0">
         </div>
 
-        <!-- オプション機能：交通費 -->
         <div class="form-group" id="group_transport">
           <label for="transport_cost">交通費 (円)</label>
           <input type="number" id="transport_cost" value="0">
@@ -113,63 +110,53 @@
   </div>
 
   <script>
-    // URLクエリパラメータの取得
-    const urlParams = new URLSearchParams(window.location.search);
-    const GAS_URL = urlParams.get('gas');
-    const paramLiffId = urlParams.get('liffId');
+    // URLパラメータの取得
+    const params = new URLSearchParams(window.location.search);
+    const LIFF_ID = params.get('liffId');
+    const GAS_URL = params.get('gas');
 
-    const hideExpense = urlParams.get('expense') === 'off';
-    const hideTransport = urlParams.get('transport') === 'off';
-    const hideSpecial1 = urlParams.get('special1') === 'off';
-    const hideSpecial2 = urlParams.get('special2') === 'off';
+    const hideExpense = params.get('expense') === 'off';
+    const hideTransport = params.get('transport') === 'off';
+    const hideSpecial1 = params.get('special1') === 'off';
+    const hideSpecial2 = params.get('special2') === 'off';
 
-    // フィールド非表示制御
+    let currentUserId = "";
+    const submitBtn = document.getElementById("submitBtn");
+
+    // 初期設定と表示非表示制御
     window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
       if (hideExpense) document.getElementById('group_expense')?.style.setProperty('display', 'none');
       if (hideTransport) document.getElementById('group_transport')?.style.setProperty('display', 'none');
       if (hideSpecial1) document.getElementById('group_special1')?.style.setProperty('display', 'none');
       if (hideSpecial2) document.getElementById('group_special2')?.style.setProperty('display', 'none');
     });
 
-    let currentUserId = "";
-    const submitBtn = document.getElementById("submitBtn");
+    // LIFF初期化
+    async function initLiff() {
+      if (!LIFF_ID || !GAS_URL) {
+        alert("設定エラー: エンドポイントURLに liffId または gas パラメータが含まれていません。");
+        return;
+      }
 
-    // LIFF初期化処理
-    async function initializeLiff() {
       try {
-        let targetLiffId = paramLiffId;
+        await liff.init({ liffId: LIFF_ID });
 
-        // URLパラメータにない場合はデフォルト用ID（フォールバック）を適用
-        if (!targetLiffId) {
-          targetLiffId = "2012196822-vZFn0zUq";
-        }
-
-        // 判定した liffId を渡して必ずオブジェクト指定で初期化する
-        await liff.init({ liffId: targetLiffId });
-
-        document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
-
-        // ログインチェック
         if (!liff.isLoggedIn()) {
-          liff.login();
+          liff.login({ redirectUri: window.location.href });
           return;
         }
 
-        // プロフィール情報取得
         const profile = await liff.getProfile();
         currentUserId = profile.userId;
 
-        // 保存済み氏名の自動復元
+        // 前回保存した氏名を復元
         const savedName = localStorage.getItem("staff_name_saved");
-        if (savedName) {
-          document.getElementById("staff_name").value = savedName;
-        }
+        if (savedName) document.getElementById("staff_name").value = savedName;
 
-        // 準備完了時にボタン有効化
+        // 準備完了
         submitBtn.disabled = false;
         submitBtn.innerText = "送信する";
-
-        // 初回ログ読み込み
         fetchLogs();
 
       } catch (err) {
@@ -179,8 +166,7 @@
       }
     }
 
-    // 初期化実行
-    initializeLiff();
+    initLiff();
 
     // タブ切り替え
     function switchTab(tabId) {
@@ -198,29 +184,19 @@
     }
 
     // フォーム送信処理
-    document.getElementById("attendanceForm").addEventListener("submit", function(e) {
+    document.getElementById("attendanceForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      
-      if (!GAS_URL) {
-        alert("エラー: GASのURLパラメータ(?gas=...)が指定されていません。");
-        return;
-      }
 
       if (!currentUserId) {
-        alert("LINEユーザー情報の取得が完了していません。LINEアプリ内から開き直してください。");
+        alert("ユーザー情報の取得が完了していません。");
         return;
       }
 
       submitBtn.disabled = true;
       submitBtn.innerText = "送信処理中...";
 
-      const expenseVal = hideExpense ? 0 : (Number(document.getElementById("expense_amount").value) || 0);
-      const transportVal = hideTransport ? 0 : (Number(document.getElementById("transport_cost").value) || 0);
-      const isSpecial1 = hideSpecial1 ? false : document.getElementById("is_special_wage1").checked;
-      const isSpecial2 = hideSpecial2 ? false : document.getElementById("is_special_wage2").checked;
       const inputName = document.getElementById("staff_name").value.trim();
-
-      const formData = {
+      const payload = {
         action: "submit",
         user_id: currentUserId,
         staff_name: inputName,
@@ -228,62 +204,48 @@
         start_time: document.getElementById("start_time").value,
         end_time: document.getElementById("end_time").value,
         break_minutes: Number(document.getElementById("break_minutes").value) || 0,
-        is_special_wage1: isSpecial1,
-        is_special_wage2: isSpecial2,
-        expense_amount: expenseVal,
-        transport_cost: transportVal,
+        is_special_wage1: hideSpecial1 ? false : document.getElementById("is_special_wage1").checked,
+        is_special_wage2: hideSpecial2 ? false : document.getElementById("is_special_wage2").checked,
+        expense_amount: hideExpense ? 0 : (Number(document.getElementById("expense_amount").value) || 0),
+        transport_cost: hideTransport ? 0 : (Number(document.getElementById("transport_cost").value) || 0),
         memo: document.getElementById("memo").value || ""
       };
 
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify(formData)
-      })
-      .then(res => res.json())
-      .then(data => {
+      try {
+        const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(payload) });
+        const data = await res.json();
+
         if (data.status === "success") {
           alert(data.message);
-
-          if (inputName) {
-            localStorage.setItem("staff_name_saved", inputName);
-          }
-
+          if (inputName) localStorage.setItem("staff_name_saved", inputName);
           renderLogs(data.logs);
           switchTab('logTab');
         } else {
           alert("エラー: " + data.message);
         }
-      })
-      .catch(err => {
+      } catch (err) {
         alert("送信エラーが発生しました: " + err);
-      })
-      .finally(() => {
+      } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "送信する";
-      });
+      }
     });
 
     // ログ取得処理
-    function fetchLogs() {
+    async function fetchLogs() {
       if (!currentUserId || !GAS_URL) return;
-
       const container = document.getElementById("logsContainer");
-      
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "get_logs", user_id: currentUserId })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === "success") {
-          renderLogs(data.logs);
-        } else {
-          container.innerHTML = "<div style='text-align:center; color:red;'>ログの取得に失敗しました</div>";
-        }
-      })
-      .catch(err => {
-        container.innerHTML = "<div style='text-align:center; color:red;'>通信エラーが発生しました</div>";
-      });
+
+      try {
+        const res = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "get_logs", user_id: currentUserId })
+        });
+        const data = await res.json();
+        if (data.status === "success") renderLogs(data.logs);
+      } catch (err) {
+        container.innerHTML = "<div style='text-align:center; color:red;'>ログの取得に失敗しました</div>";
+      }
     }
 
     // ログ表示レンダリング
