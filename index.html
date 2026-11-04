@@ -166,7 +166,7 @@
           liff.login();
         }
       })
-      .catch(err => alert("LIFF初期化失敗: " + (err.message || JSON.stringify(err))));
+      .catch(err => console.error("LIFF Init Error:", err));
 
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
