@@ -116,7 +116,7 @@
     // URLクエリパラメータの取得
     const urlParams = new URLSearchParams(window.location.search);
     const GAS_URL = urlParams.get('gas');
-    const paramLiffId = urlParams.get('liffId'); // URL直叩き用（任意指定）
+    const paramLiffId = urlParams.get('liffId');
 
     const hideExpense = urlParams.get('expense') === 'off';
     const hideTransport = urlParams.get('transport') === 'off';
@@ -137,13 +137,15 @@
     // LIFF初期化処理
     async function initializeLiff() {
       try {
-        // パラメータ指定があれば指定IDで、無ければLINEアプリ文脈の引数なし/デフォルトで動的判定
-        if (paramLiffId) {
-          await liff.init({ liffId: paramLiffId });
-        } else {
-          // LINEアプリ内からリッチメニュー経由で開かれた場合、liff.init()で開かれたLIFF IDを自動識別
-          await liff.init();
+        let targetLiffId = paramLiffId;
+
+        // URLパラメータにない場合はデフォルト用ID（フォールバック）を適用
+        if (!targetLiffId) {
+          targetLiffId = "2012196822-vZFn0zUq";
         }
+
+        // 判定した liffId を渡して必ずオブジェクト指定で初期化する
+        await liff.init({ liffId: targetLiffId });
 
         document.getElementById("work_date").value = new Date().toISOString().split('T')[0];
 
